@@ -14,6 +14,7 @@
 
 #include <kotlib/macro.h>
 #include <kotlib/OptionParser.hpp>
+#include "oclErrorCode.h"
 
 
 static constexpr cl_uint kNDefaultPlatformEntry = 16;
@@ -24,6 +25,13 @@ static const std::unordered_map<std::string, cl_int> kDeviceTypeMap{
   {"cpu", CL_DEVICE_TYPE_CPU},
   {"gpu", CL_DEVICE_TYPE_GPU}
 };
+
+
+#define OCLC_CHECK_ERROR(errCode) \
+  KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, std::string("[OpenCL] [") + std::to_string(errCode) + "] " + kErrorMessageMap.at(errCode))
+
+#define OCLC_CHECK_ERROR_WITH_MSG(errCode, msg) \
+  KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, std::string("[OpenCL] [") + std::to_string(errCode) + "] " + kErrorMessageMap.at(errCode) + "\n" + msg)
 
 
 /*!
@@ -37,7 +45,7 @@ getPlatformIds(cl_uint nPlatformEntry = kNDefaultPlatformEntry)
   std::vector<cl_platform_id> platformIds(nPlatformEntry);
   cl_uint nPlatform;
   cl_int errCode = clGetPlatformIDs(nPlatformEntry, platformIds.data(), &nPlatform);
-  KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clGetPlatformIDs() failed");
+  OCLC_CHECK_ERROR(errCode);
   platformIds.resize(nPlatform);
   return platformIds;
 }
@@ -56,7 +64,7 @@ getDeviceIds(const cl_platform_id& platformId, cl_uint nDeviceEntry = kNDefaultD
   std::vector<cl_device_id> deviceIds(nDeviceEntry);
   cl_uint nDevice;
   cl_int errCode = clGetDeviceIDs(platformId, deviceType, nDeviceEntry, deviceIds.data(), &nDevice);
-  KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clGetDeviceIDs() failed");
+  OCLC_CHECK_ERROR(errCode);
   deviceIds.resize(nDevice);
   return deviceIds;
 }
@@ -115,11 +123,11 @@ showPlatformInfo(cl_platform_id platformId)
   std::size_t size;
 
   cl_int errCode = clGetPlatformInfo(platformId, CL_PLATFORM_NAME, info.size(), info.data(), &size);
-  KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clGetPlatformInfo() failed");
+  OCLC_CHECK_ERROR(errCode);
   std::cout << "  CL_PLATFORM_NAME: " << info.data() << std::endl;
 
   errCode = clGetPlatformInfo(platformId, CL_PLATFORM_VERSION, info.size(), info.data(), &size);
-  KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clGetPlatformInfo() failed");
+  OCLC_CHECK_ERROR(errCode);
   std::cout << "  CL_PLATFORM_VERSION: " << info.data() << std::endl;
 }
 
@@ -135,11 +143,11 @@ showDeviceInfo(cl_device_id deviceId)
   std::size_t size;
 
   cl_int errCode = clGetDeviceInfo(deviceId, CL_DEVICE_NAME, info.size(), info.data(), &size);
-  KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clGetDeviceInfo() failed");
+  OCLC_CHECK_ERROR(errCode);
   std::cout << "    CL_DEVICE_NAME: " << info.data() << std::endl;
 
   errCode = clGetDeviceInfo(deviceId, CL_DEVICE_VERSION, info.size(), info.data(), &size);
-  KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clGetDeviceInfo() failed");
+  OCLC_CHECK_ERROR(errCode);
   std::cout << "    CL_DEVICE_VERSION: " << info.data() << std::endl;
 }
 
@@ -225,7 +233,7 @@ main(int argc, char* argv[])
     cl_int errCode;
     std::unique_ptr<std::remove_pointer<cl_context>::type, decltype(&clReleaseContext)> context(
         clCreateContext(nullptr, static_cast<cl_uint>(deviceIds.size()), &deviceIds[di], nullptr, nullptr, &errCode), clReleaseContext);
-    KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clCreateContext() failed");
+    OCLC_CHECK_ERROR(errCode);
 
     std::vector<std::string> kernelSources = readSource(op.getArguments());
     std::pair<std::vector<const char*>, std::vector<std::string::size_type> > kernelSourcePairs;
@@ -243,7 +251,7 @@ main(int argc, char* argv[])
           kernelSourcePairs.second.data(),
           &errCode),
         clReleaseProgram);
-    KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clCreateProgramWithSource() failed");
+    OCLC_CHECK_ERROR(errCode);
 
     // Compile kernel source code
     errCode = clBuildProgram(program.get(), static_cast<cl_uint>(deviceIds.size()), &deviceIds[di], op.get("option").c_str(), nullptr, nullptr);
@@ -255,14 +263,14 @@ main(int argc, char* argv[])
           std::array<char, 2048> buildLog;
           std::size_t logSize;
           clGetProgramBuildInfo(program.get(), deviceIds[di], CL_PROGRAM_BUILD_LOG, buildLog.size(), buildLog.data(), &logSize);
-          KOTLIB_THROW_IF(errCode == CL_BUILD_PROGRAM_FAILURE, std::runtime_error, "Compile error:\n" + buildLog.data());
+          OCLC_CHECK_ERROR_WITH_MSG(errCode, buildLog.data());
         }
         break;
       case CL_INVALID_BUILD_OPTIONS:
-        KOTLIB_THROW_IF(errCode == CL_INVALID_BUILD_OPTIONS, std::runtime_error, "Invalid option is specified");
+        OCLC_CHECK_ERROR(errCode);
         break;
       default:
-        KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clBuildProgram() failed");
+        OCLC_CHECK_ERROR(errCode);
     }
     if (op.get<bool>("fsyntax-only")) {
       return EXIT_SUCCESS;
@@ -271,11 +279,11 @@ main(int argc, char* argv[])
     // figure out number of devices and the sizes of the binary for each device.
     cl_uint nDevice;
     errCode = clGetProgramInfo(program.get(), CL_PROGRAM_NUM_DEVICES, sizeof(nDevice), &nDevice, nullptr);
-    KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clGetProgramInfo() failed");
+    OCLC_CHECK_ERROR(errCode);
 
     std::unique_ptr<std::size_t[]> binSizes(new std::size_t[nDevice]);
     errCode = clGetProgramInfo(program.get(), CL_PROGRAM_BINARY_SIZES, sizeof(std::size_t) * nDevice, binSizes.get(), nullptr);
-    KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clGetProgramInfo() failed");
+    OCLC_CHECK_ERROR(errCode);
 
     // copy over all of the generated bins.
     std::vector<std::unique_ptr<char> > bins(nDevice);
@@ -283,7 +291,7 @@ main(int argc, char* argv[])
       bins[i] = std::unique_ptr<char>(binSizes[i] == 0 ? nullptr : new char[binSizes[i]]);
     }
     errCode = clGetProgramInfo(program.get(), CL_PROGRAM_BINARIES, sizeof(char*) * nDevice, bins.data(), nullptr);
-    KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clGetProgramInfo() failed");
+    OCLC_CHECK_ERROR(errCode);
 
     std::string basename = removeSuffix(args[0]);
     for (std::size_t i = 0; i < nDevice; i++) {

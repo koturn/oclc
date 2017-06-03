@@ -231,7 +231,7 @@ main(int argc, char* argv[])
         clCreateKernel(program.get(), "vecAdd", &errCode), clReleaseKernel);
     KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clCreateKernel() failed");
 
-    errCode = setKernelArgs(kernel.get(), deviceZ.get(), deviceX.get(), deviceY.get(), static_cast<int>(N));
+    errCode = setKernelArgs(kernel.get(), deviceZ.get(), deviceX.get(), deviceY.get());
     KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "setKernelArgs() failed");
     errCode = clEnqueueTask(cmdQueue.get(), kernel.get(), 0, nullptr, nullptr);
     KOTLIB_THROW_IF(errCode != CL_SUCCESS, std::runtime_error, "clEnqueueTask() failed");
