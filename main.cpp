@@ -5,6 +5,7 @@
 #include <ctime>
 #include <fstream>
 #include <memory>
+#include <array>
 
 #ifdef __APPLE__
 #  include <OpenCL/opencl.h>
