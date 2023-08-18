@@ -261,10 +261,13 @@ main(int argc, char* argv[])
         break;
       case CL_BUILD_PROGRAM_FAILURE:
         {
-          std::array<char, 2048> buildLog;
+          std::vector<char> buildLog;
           std::size_t logSize;
-          clGetProgramBuildInfo(program.get(), deviceIds[di], CL_PROGRAM_BUILD_LOG, buildLog.size(), buildLog.data(), &logSize);
-          OCLC_CHECK_ERROR_WITH_MSG(errCode, buildLog.data());
+          clGetProgramBuildInfo(program.get(), deviceIds[di], CL_PROGRAM_BUILD_LOG, 0, nullptr, &logSize);
+          buildLog.resize(logSize + 1); // fail safe for 0-byte log
+          buildLog[logSize] = '\0';
+          clGetProgramBuildInfo(program.get(), deviceIds[di], CL_PROGRAM_BUILD_LOG, logSize, &buildLog[0], nullptr);
+          OCLC_CHECK_ERROR_WITH_MSG(errCode, &buildLog[0]);
         }
         break;
       case CL_INVALID_BUILD_OPTIONS:
